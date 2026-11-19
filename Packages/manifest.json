@@ -39,7 +39,6 @@
     "com.unity.modules.wind": "1.0.0",
     "com.unity.modules.xr": "1.0.0",
     "com.ptc.vuforia.engine": "file:com.ptc.vuforia.engine-11.4.4.tgz",
-    "com.google.xr.cardboard": "https://github.com/googlevr/cardboard-xr-plugin.git",
-    "com.unity.cloud.gltfast": "6.12.0"
+    "com.unity.pipeline": "1.0.0"
   }
 }
