@@ -1,24 +1,22 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace Kelompok4.AR
 {
     /// <summary>
     /// InteraksiBukuAR:
-    /// Mengendalikan interaksi 3D model Buku Pariwisata menggunakan HAND TRACKING (kamera optik di udara).
-    /// Menggerakkan tangan ke kiri/kanan memutar buku secara horizontal.
-    /// Menggerakkan tangan ke atas/bawah memutar dan membalikkan buku secara vertikal (flip).
-    /// Gestur CUBITAN (PINCH) melipatgandakan kecepatan putaran untuk membalikkan objek dengan cepat.
-    /// Skala objek dijaga 100% stabil (tidak membesar-kecil sendiri akibat noise kamera).
+    /// Mengendalikan interaksi 3D Digital Twin (Buku Pariwisata, Buku Campus, Kalkulator, Penghapus, Pulpen)
+    /// menggunakan HAND TRACKING MediaPipe di udara, dengan fallback sentuhan layar & mouse.
     /// </summary>
     public class InteraksiBukuAR : MonoBehaviour
     {
         [Header("Pengaturan Hand Tracking (Interaksi di Udara)")]
         [Tooltip("Sensitivitas putaran objek saat tangan bergerak di udara")]
-        public float kecepatanPutarSentuh = 220.0f; // Nama field dipertahankan demi kompatibilitas serialisasi Unity
+        public float kecepatanPutarSentuh = 240.0f;
         public float kecepatanPutarMouse = 5.0f;
         public float dampingKecepatan = 5.0f;
         public bool autoRotate = false;
-        public float kecepatanAutoRotate = 20.0f;
+        public float kecepatanAutoRotate = 25.0f;
 
         [System.NonSerialized]
         public float pengaliKecepatanPinch = 2.2f;
@@ -26,6 +24,7 @@ namespace Kelompok4.AR
         private Vector3 initialLocalPos;
         private Quaternion initialLocalRot;
         private Vector3 initialLocalScale;
+        private bool initialCaptured = false;
 
         private Vector2 angularVelocity;
         private float lastInteractionTime = 0f;
@@ -44,90 +43,112 @@ namespace Kelompok4.AR
             return mainCamera != null ? mainCamera.transform.right : Vector3.right;
         }
 
-        private void Awake()
+        public void CaptureInitialTransform()
         {
-            mainCamera = Camera.main;
             initialLocalPos = transform.localPosition;
             initialLocalRot = transform.localRotation;
             initialLocalScale = transform.localScale;
-
-            // Fallback pengaman jika skala lokal terdeteksi 0 atau tidak wajar
-            if (initialLocalScale.x < 0.01f || initialLocalScale.y < 0.001f || initialLocalScale.z < 0.01f)
+            if (initialLocalScale.sqrMagnitude < 0.00001f)
             {
-                initialLocalScale = new Vector3(0.2f, 0.03f, 0.266f);
+                initialLocalScale = Vector3.one;
                 transform.localScale = initialLocalScale;
             }
-            if (initialLocalPos == Vector3.zero)
+            initialCaptured = true;
+        }
+
+        private void Awake()
+        {
+            mainCamera = Camera.main;
+            if (!initialCaptured)
             {
-                initialLocalPos = new Vector3(0f, 0.04f, 0f);
-                transform.localPosition = initialLocalPos;
+                CaptureInitialTransform();
             }
 
-            // Pastikan kecepatan putaran memiliki nilai optimal untuk koordinat normalisasi hand tracking
             if (kecepatanPutarSentuh < 50f)
             {
-                kecepatanPutarSentuh = 320.0f;
+                kecepatanPutarSentuh = 280.0f;
             }
             pengaliKecepatanPinch = 2.2f;
         }
 
         private void OnEnable()
         {
+            if (!initialCaptured)
+            {
+                CaptureInitialTransform();
+            }
             lastInteractionTime = Time.time;
             angularVelocity = Vector2.zero;
+            transform.localScale = initialLocalScale;
+        }
 
-            // Pastikan skala selalu terkunci stabil pada ukuran normal awal
-            if (initialLocalScale.x > 0.001f)
+        public bool IsCurrentlyVisible()
+        {
+            if (!gameObject.activeInHierarchy) return false;
+            Renderer[] renderers = GetComponentsInChildren<Renderer>(false);
+            for (int i = 0; i < renderers.Length; i++)
             {
-                transform.localScale = initialLocalScale;
+                if (renderers[i] != null && renderers[i].enabled)
+                {
+                    return true;
+                }
             }
+            return false;
         }
 
         private void Update()
         {
+            if (!IsCurrentlyVisible()) return;
+
             bool interactedThisFrame = false;
             PelacakTanganKameraAR pelacak = PelacakTanganKameraAR.Instance;
 
-            // =========================================================================
-            // 1. KENDALI HAND TRACKING DI UDARA: MEMUTAR & MEMBALIKKAN OBJEK
-            // =========================================================================
+            // 1. KENDALI UTAMA: HAND TRACKING MEDIAPIPE DI UDARA
             if (pelacak != null && pelacak.isHandDetected)
             {
                 Vector2 delta = pelacak.handDelta;
-
-                // Tangan bergerak di udara -> Langsung putar/balikkan objek dengan responsivitas tinggi!
                 if (delta.sqrMagnitude > 0.00000001f)
                 {
-                    // Faktor pengali: saat mencubit (pinch), putaran lebih cepat & responsif untuk membalikkan objek
                     float speed = pelacak.isPinching ? (kecepatanPutarSentuh * pengaliKecepatanPinch) : kecepatanPutarSentuh;
 
-                    // Rotasi diselaraskan dengan sudut pandang kamera (View Space) agar gerakan tangan selalu presisi
                     Vector3 axisYaw = GetCameraUpAxis();
                     Vector3 axisPitch = GetCameraRightAxis();
 
-                    // 1. Gerakan Horizontal (Kiri/Kanan): Memutar buku sejajar sumbu vertikal layar kamera
                     float rotY = -delta.x * speed;
-
-                    // 2. Gerakan Vertikal (Atas/Bawah): Memutar / Membalikkan buku sejajar sumbu horizontal layar kamera
                     float rotX = delta.y * speed;
 
                     transform.Rotate(axisYaw, rotY, Space.World);
                     transform.Rotate(axisPitch, rotX, Space.World);
 
-                    // Simpan momentum putaran
                     angularVelocity = new Vector2(rotX, rotY) / Mathf.Max(Time.deltaTime, 0.001f) * 0.045f;
                     interactedThisFrame = true;
                 }
-
-                // CATATAN PENTING: Fitur scaling dari noise kamera telah dinonaktifkan total
-                // agar objek tetap stabil dan tidak membesar/mengecil sendiri!
             }
-
-#if UNITY_EDITOR
-            // Pengujian Tambahan di Editor: Drag Mouse Kiri
-            if (pelacak == null || !pelacak.isHandDetected)
+            else
             {
-                if (Input.GetMouseButton(0) && !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+                // 2. FALLBACK SENTUHAN LAYAR ANDROID ATAU MOUSE DI EDITOR
+                bool pointerOverUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+                if (!pointerOverUI && Input.touchCount == 1)
+                {
+                    Touch touch = Input.GetTouch(0);
+                    bool touchOverUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(touch.fingerId);
+                    if (!touchOverUI && touch.phase == TouchPhase.Moved)
+                    {
+                        Vector3 axisYaw = GetCameraUpAxis();
+                        Vector3 axisPitch = GetCameraRightAxis();
+
+                        float rotY = -touch.deltaPosition.x * 0.35f;
+                        float rotX = touch.deltaPosition.y * 0.35f;
+
+                        transform.Rotate(axisYaw, rotY, Space.World);
+                        transform.Rotate(axisPitch, rotX, Space.World);
+
+                        angularVelocity = new Vector2(rotX, rotY) * 6f;
+                        interactedThisFrame = true;
+                    }
+                }
+#if UNITY_EDITOR
+                else if (!pointerOverUI && Input.GetMouseButton(0))
                 {
                     float mouseX = Input.GetAxis("Mouse X");
                     float mouseY = Input.GetAxis("Mouse Y");
@@ -146,12 +167,10 @@ namespace Kelompok4.AR
                         interactedThisFrame = true;
                     }
                 }
-            }
 #endif
+            }
 
-            // =========================================================================
-            // 2. INERSIA & MOMENTUM (Redaman Halus Saat Tangan Berhenti / Diangkat)
-            // =========================================================================
+            // 3. INERSIA & AUTO-ROTATE
             if (interactedThisFrame)
             {
                 isInteracting = true;
@@ -173,8 +192,7 @@ namespace Kelompok4.AR
                     isInteracting = false;
                 }
 
-                // 3. Auto-Rotate Berputar Halus jika fitur diaktifkan
-                if (!isInteracting && autoRotate && (Time.time - lastInteractionTime > 1.0f))
+                if (!isInteracting && autoRotate && (Time.time - lastInteractionTime > 0.8f))
                 {
                     Vector3 axisYaw = GetCameraUpAxis();
                     transform.Rotate(axisYaw, kecepatanAutoRotate * Time.deltaTime, Space.World);
@@ -182,9 +200,6 @@ namespace Kelompok4.AR
             }
         }
 
-        /// <summary>
-        /// Membalikkan objek 180 derajat secara instan
-        /// </summary>
         public void BalikkanObjek180()
         {
             transform.Rotate(Vector3.up, 180f, Space.Self);
@@ -193,12 +208,7 @@ namespace Kelompok4.AR
 
         public void ResetTransform()
         {
-            if (initialLocalScale.x < 0.01f)
-            {
-                initialLocalPos = new Vector3(0f, 0.04f, 0f);
-                initialLocalRot = Quaternion.identity;
-                initialLocalScale = new Vector3(0.2f, 0.03f, 0.266f);
-            }
+            if (!initialCaptured) CaptureInitialTransform();
             transform.localPosition = initialLocalPos;
             transform.localRotation = initialLocalRot;
             transform.localScale = initialLocalScale;

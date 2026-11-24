@@ -640,11 +640,11 @@ namespace Kelompok4.AR
                     {
                         if (isPinching)
                         {
-                            txtReticleStatus.text = "🟡 <color=#FFD700>MENCUBIT (PINCH)</color>\n<size=12><color=#FFFFFF>Putaran Dipercepat</color></size>";
+                            txtReticleStatus.text = "<color=#FFD700>[PINCH] MENCUBIT</color>\n<size=12><color=#FFFFFF>Putaran Dipercepat</color></size>";
                         }
                         else
                         {
-                            txtReticleStatus.text = "✋ <color=#00E5FF>TANGAN TERLACAK</color>\n<size=12><color=#FFFFFF>Geser tangan untuk memutar / membalik</color></size>";
+                            txtReticleStatus.text = "<color=#00E5FF>[AKTIF] TANGAN TERLACAK</color>\n<size=12><color=#FFFFFF>Geser tangan untuk memutar / membalik</color></size>";
                         }
                     }
                 }

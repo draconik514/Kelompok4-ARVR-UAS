@@ -13,7 +13,34 @@ namespace Kelompok4.AR.Editor
     {
         static SetupARHUDHandTracking()
         {
-            EditorApplication.delayCall += ExecuteSetup;
+            EditorApplication.delayCall += AutoEnsureIfNeeded;
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.EnteredEditMode)
+            {
+                EditorApplication.delayCall += AutoEnsureIfNeeded;
+            }
+        }
+
+        private static void AutoEnsureIfNeeded()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+
+            bool lengkap =
+                GameObject.Find("ImageTarget") != null &&
+                GameObject.Find("ImageTarget_BukuCampus") != null &&
+                GameObject.Find("ImageTarget_Kalkulator") != null &&
+                GameObject.Find("ImageTarget_Penghapus") != null &&
+                GameObject.Find("ImageTarget_Pulpen") != null &&
+                GameObject.Find("Btn_GantiObjek") != null;
+
+            if (!lengkap)
+            {
+                ExecuteSetup();
+            }
         }
 
         [MenuItem("AR/Refresh and Reload Domain")]
@@ -27,14 +54,24 @@ namespace Kelompok4.AR.Editor
         [MenuItem("AR/Setup HUD and Hand Tracking")]
         public static void ExecuteSetup()
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+
             var scene = EditorSceneManager.GetActiveScene();
             if (scene.name != "Scene_AR")
             {
                 string scenePath = "Assets/Scenes/Scene_AR.unity";
-                scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+                if (System.IO.File.Exists(scenePath))
+                {
+                    scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+                }
+                else
+                {
+                    return;
+                }
             }
 
-            Debug.Log("[SetupARHUD] Memulai konfigurasi Canvas HUD & Pelacak Tangan...");
+            // 0. Bangun ke-5 ImageTarget Vuforia dari DB_Kelompok4 & 3D Digital Twin masing-masing
+            KatalogObjekSehariHariBuilder.BangunKatalogObjek();
 
             // 1. Dapatkan atau Buat Canvas_HUD (Screen Space Overlay)
             GameObject canvasHUDGO = GameObject.Find("Canvas_HUD");
@@ -53,7 +90,7 @@ namespace Kelompok4.AR.Editor
                 canvasHUDGO.AddComponent<GraphicRaycaster>();
             }
 
-            // 2. Dapatkan atau Buat Panel_Status (Top Banner)
+            // 2. Panel_Status (Top Banner)
             Transform panelStatusT = canvasHUDGO.transform.Find("Panel_Status");
             GameObject panelStatusGO;
             if (panelStatusT == null)
@@ -76,7 +113,6 @@ namespace Kelompok4.AR.Editor
                 panelStatusGO = panelStatusT.gameObject;
             }
 
-            // Txt_Status
             Transform txtStatusT = panelStatusGO.transform.Find("Txt_Status");
             TextMeshProUGUI txtStatus;
             if (txtStatusT == null)
@@ -91,17 +127,17 @@ namespace Kelompok4.AR.Editor
                 rect.offsetMax = new Vector2(-20f, -10f);
 
                 txtStatus = txtGO.GetComponent<TextMeshProUGUI>();
-                txtStatus.fontSize = 24;
+                txtStatus.fontSize = 23;
                 txtStatus.alignment = TextAlignmentOptions.Center;
                 txtStatus.color = Color.white;
-                txtStatus.text = "AR BUKU PARIWISATA 3D\n<size=20><color=#FFCC00>Arahkan kamera ke gambar sampul Buku Pariwisata</color></size>";
             }
             else
             {
                 txtStatus = txtStatusT.GetComponent<TextMeshProUGUI>();
             }
+            txtStatus.text = "AR DETEKSI 5 OBJEK NYATA + HAND TRACKING\n<size=19><color=#FFCC00>Scan Buku / Kalkulator / Penghapus / Pulpen (atau klik PREVIEW 3D)</color></size>";
 
-            // 3. Dapatkan atau Buat KerangkaTangan_Overlay (Hand Skeleton Renderer)
+            // 3. KerangkaTangan_Overlay (Hand Skeleton Renderer)
             Transform skeletonT = canvasHUDGO.transform.Find("KerangkaTangan_Overlay");
             KerangkaTanganUI kerangkaUI;
             if (skeletonT == null)
@@ -120,7 +156,7 @@ namespace Kelompok4.AR.Editor
                 kerangkaUI = skeletonT.GetComponent<KerangkaTanganUI>();
             }
 
-            // 4. Dapatkan atau Buat Reticle_HandTracking (Label status di bawah tangan)
+            // 4. Reticle_HandTracking
             Transform reticleT = canvasHUDGO.transform.Find("Reticle_HandTracking");
             GameObject reticleGO;
             UnityEngine.UI.Image reticleImage;
@@ -134,9 +170,8 @@ namespace Kelompok4.AR.Editor
                 rect.sizeDelta = new Vector2(80f, 80f);
 
                 reticleImage = reticleGO.GetComponent<UnityEngine.UI.Image>();
-                reticleImage.color = Color.clear; // Transparan agar kotak pointer lama tidak muncul
+                reticleImage.color = Color.clear;
 
-                // Child Teks Status
                 GameObject txtReticleGO = new GameObject("Txt_ReticleStatus", typeof(RectTransform), typeof(TextMeshProUGUI));
                 txtReticleGO.transform.SetParent(reticleGO.transform, false);
                 RectTransform textRect = txtReticleGO.GetComponent<RectTransform>();
@@ -148,7 +183,7 @@ namespace Kelompok4.AR.Editor
                 txtReticle.fontStyle = FontStyles.Bold;
                 txtReticle.alignment = TextAlignmentOptions.Center;
                 txtReticle.color = Color.white;
-                txtReticle.text = "✋ TANGAN TERLACAK";
+                txtReticle.text = "[AKTIF] TANGAN TERLACAK";
             }
             else
             {
@@ -158,14 +193,13 @@ namespace Kelompok4.AR.Editor
                 Transform dot = reticleGO.transform.Find("CenterDot");
                 if (dot != null) dot.gameObject.SetActive(false);
                 txtReticle = reticleGO.GetComponentInChildren<TextMeshProUGUI>(true);
+                if (txtReticle != null) txtReticle.text = "[AKTIF] TANGAN TERLACAK";
             }
             reticleGO.SetActive(false);
 
-            // 5. Dapatkan atau Buat Panel_BottomControls (Balikkan, Reset & Auto Putar)
+            // 5. Panel_BottomControls (PASTIKAN ke-3 tombol dibuat lengkap bahkan jika panel sudah ada sebelumnya!)
             Transform bottomControlsT = canvasHUDGO.transform.Find("Panel_BottomControls");
             GameObject bottomControlsGO;
-            Button btnReset = null;
-            Button btnAutoPutar = null;
             if (bottomControlsT == null)
             {
                 bottomControlsGO = new GameObject("Panel_BottomControls", typeof(RectTransform));
@@ -176,50 +210,24 @@ namespace Kelompok4.AR.Editor
                 rect.anchorMax = new Vector2(0.5f, 0f);
                 rect.pivot = new Vector2(0.5f, 0f);
                 rect.anchoredPosition = new Vector2(0f, 40f);
-                rect.sizeDelta = new Vector2(480f, 80f);
+                rect.sizeDelta = new Vector2(720f, 80f);
 
                 HorizontalLayoutGroup layout = bottomControlsGO.AddComponent<HorizontalLayoutGroup>();
-                layout.spacing = 20f;
+                layout.spacing = 15f;
                 layout.childAlignment = TextAnchor.MiddleCenter;
                 layout.childControlWidth = false;
                 layout.childControlHeight = false;
-
-                // Btn_Reset
-                GameObject btnResetGO = new GameObject("Btn_Reset", typeof(RectTransform), typeof(UnityEngine.UI.Image), typeof(Button));
-                btnResetGO.transform.SetParent(bottomControlsGO.transform, false);
-                btnResetGO.GetComponent<RectTransform>().sizeDelta = new Vector2(210f, 65f);
-                btnResetGO.GetComponent<UnityEngine.UI.Image>().color = new Color(0.2f, 0.4f, 0.8f, 0.9f);
-                btnReset = btnResetGO.GetComponent<Button>();
-
-                GameObject txtResetGO = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
-                txtResetGO.transform.SetParent(btnResetGO.transform, false);
-                RectTransform tr = txtResetGO.GetComponent<RectTransform>();
-                tr.anchorMin = Vector2.zero; tr.anchorMax = Vector2.one; tr.sizeDelta = Vector2.zero;
-                TextMeshProUGUI txtR = txtResetGO.GetComponent<TextMeshProUGUI>();
-                txtR.fontSize = 17; txtR.fontStyle = FontStyles.Bold; txtR.alignment = TextAlignmentOptions.Center;
-                txtR.text = "RESET POSISI"; txtR.color = Color.white;
-
-                // Btn_AutoPutar
-                GameObject btnAutoGO = new GameObject("Btn_AutoPutar", typeof(RectTransform), typeof(UnityEngine.UI.Image), typeof(Button));
-                btnAutoGO.transform.SetParent(bottomControlsGO.transform, false);
-                btnAutoGO.GetComponent<RectTransform>().sizeDelta = new Vector2(210f, 65f);
-                btnAutoGO.GetComponent<UnityEngine.UI.Image>().color = new Color(0.15f, 0.65f, 0.4f, 0.9f);
-                btnAutoPutar = btnAutoGO.GetComponent<Button>();
-
-                GameObject txtAutoGO = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
-                txtAutoGO.transform.SetParent(btnAutoGO.transform, false);
-                RectTransform ta = txtAutoGO.GetComponent<RectTransform>();
-                ta.anchorMin = Vector2.zero; ta.anchorMax = Vector2.one; ta.sizeDelta = Vector2.zero;
-                TextMeshProUGUI txtA = txtAutoGO.GetComponent<TextMeshProUGUI>();
-                txtA.fontSize = 17; txtA.fontStyle = FontStyles.Bold; txtA.alignment = TextAlignmentOptions.Center;
-                txtA.text = "AUTO-PUTAR"; txtA.color = Color.white;
             }
             else
             {
                 bottomControlsGO = bottomControlsT.gameObject;
-                btnReset = bottomControlsGO.transform.Find("Btn_Reset")?.GetComponent<Button>();
-                btnAutoPutar = bottomControlsGO.transform.Find("Btn_AutoPutar")?.GetComponent<Button>();
+                bottomControlsGO.GetComponent<RectTransform>().sizeDelta = new Vector2(720f, 80f);
             }
+
+            Button btnGantiObjek = PastikanTombol(bottomControlsGO.transform, "Btn_GantiObjek", "PREVIEW 3D (0/5)", new Color(0.92f, 0.45f, 0.10f, 0.95f), new Vector2(225f, 65f), true);
+            Button btnReset = PastikanTombol(bottomControlsGO.transform, "Btn_Reset", "RESET POSISI", new Color(0.20f, 0.40f, 0.80f, 0.90f), new Vector2(210f, 65f), false);
+            Button btnAutoPutar = PastikanTombol(bottomControlsGO.transform, "Btn_AutoPutar", "AUTO-PUTAR", new Color(0.15f, 0.65f, 0.40f, 0.90f), new Vector2(210f, 65f), false);
+            TextMeshProUGUI txtGantiObjek = btnGantiObjek != null ? btnGantiObjek.GetComponentInChildren<TextMeshProUGUI>() : null;
 
             // 6. Hubungkan ke ManajerScene
             GameObject manajerGO = GameObject.Find("ManajerScene");
@@ -229,12 +237,11 @@ namespace Kelompok4.AR.Editor
                 if (pelacak == null) pelacak = manajerGO.AddComponent<PelacakTanganKameraAR>();
                 pelacak.kerangkaTanganUI = kerangkaUI;
 
-                // Set field via SerializedObject
                 SerializedObject soPelacak = new SerializedObject(pelacak);
                 soPelacak.FindProperty("reticleHandUI").objectReferenceValue = reticleGO.GetComponent<RectTransform>();
                 soPelacak.FindProperty("reticleImage").objectReferenceValue = reticleImage;
                 soPelacak.FindProperty("txtReticleStatus").objectReferenceValue = txtReticle;
-                soPelacak.ApplyModifiedProperties();
+                soPelacak.ApplyModifiedPropertiesWithoutUndo();
 
                 PengaturARObjectRecognition pengatur = manajerGO.GetComponent<PengaturARObjectRecognition>();
                 if (pengatur != null)
@@ -243,14 +250,55 @@ namespace Kelompok4.AR.Editor
                     soPengatur.FindProperty("txtStatus").objectReferenceValue = txtStatus;
                     soPengatur.FindProperty("btnReset").objectReferenceValue = btnReset;
                     soPengatur.FindProperty("btnAutoPutar").objectReferenceValue = btnAutoPutar;
+                    soPengatur.FindProperty("btnGantiObjek").objectReferenceValue = btnGantiObjek;
+                    soPengatur.FindProperty("txtBtnGantiObjek").objectReferenceValue = txtGantiObjek;
                     soPengatur.FindProperty("bottomControlsPanel").objectReferenceValue = bottomControlsGO;
-                    soPengatur.ApplyModifiedProperties();
+                    soPengatur.ApplyModifiedPropertiesWithoutUndo();
                 }
             }
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
-            Debug.Log("[SetupARHUD] SUKSES! Canvas HUD & Kerangka Tangan selesai dikonfigurasi dan disimpan ke Scene_AR.");
+            Debug.Log("[SetupARHUD] SUKSES! 5 Target Vuforia Nyata + 3D Digital Twins + HUD Hand Tracking telah aktif di Scene_AR!");
+        }
+
+        private static Button PastikanTombol(Transform parent, string btnName, string label, Color bgColor, Vector2 size, bool setFirstSibling)
+        {
+            Transform existing = parent.Find(btnName);
+            GameObject btnGO;
+            if (existing == null)
+            {
+                btnGO = new GameObject(btnName, typeof(RectTransform), typeof(UnityEngine.UI.Image), typeof(Button));
+                btnGO.transform.SetParent(parent, false);
+                if (setFirstSibling) btnGO.transform.SetAsFirstSibling();
+
+                GameObject txtGO = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
+                txtGO.transform.SetParent(btnGO.transform, false);
+                RectTransform tr = txtGO.GetComponent<RectTransform>();
+                tr.anchorMin = Vector2.zero;
+                tr.anchorMax = Vector2.one;
+                tr.sizeDelta = Vector2.zero;
+            }
+            else
+            {
+                btnGO = existing.gameObject;
+                if (setFirstSibling) btnGO.transform.SetAsFirstSibling();
+            }
+
+            btnGO.GetComponent<RectTransform>().sizeDelta = size;
+            btnGO.GetComponent<UnityEngine.UI.Image>().color = bgColor;
+
+            TextMeshProUGUI tmp = btnGO.GetComponentInChildren<TextMeshProUGUI>();
+            if (tmp != null)
+            {
+                tmp.fontSize = 16;
+                tmp.fontStyle = FontStyles.Bold;
+                tmp.alignment = TextAlignmentOptions.Center;
+                tmp.color = Color.white;
+                tmp.text = label;
+            }
+
+            return btnGO.GetComponent<Button>();
         }
     }
 }

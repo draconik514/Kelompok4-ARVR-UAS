@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <QCARConfig>
   <Tracking>
+    <ImageTarget name="4_Penghapus_Faber" size="0.060000 0.060000" />
+    <ImageTarget name="3_Kalkulator_Citizen" size="0.100000 0.100000" />
+    <ImageTarget name="2_Buku_Campus" size="0.180000 0.161716" />
+    <ImageTarget name="1_Pulpen_Pilot" size="0.150000 0.150000" />
     <ImageTarget name="Buku_Pariwisata" size="0.200000 0.266667" />
   </Tracking>
 </QCARConfig>
